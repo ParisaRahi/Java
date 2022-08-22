@@ -1,0 +1,119 @@
+import java.util.HashMap;
+import java.util.concurrent.locks.*;
+import java.util.Scanner;
+import java.io.*;
+
+
+public class Monitor1 {
+
+    private SubsekvensRegister subreg ;
+    private static Lock laas = new ReentrantLock();
+    private Condition ikkeTom = laas.newCondition();
+
+    public Monitor1(SubsekvensRegister sr){
+        subreg = sr;
+    }
+
+    public SubsekvensRegister hentsubReg(){
+        return subreg;
+    }
+
+    public void settInn(HashMap<String, Subsekvens> hashMap){
+        laas.lock();
+        try{
+            subreg.settInn(hashMap);
+            if(subreg.stoerrelse() > 1)ikkeTom.signalAll();
+        }
+        finally{
+            laas.unlock();
+        }
+    }
+
+    public HashMap<String, Subsekvens> TaUt() {
+        laas.lock();
+        try{
+            while(subreg.stoerrelse() == 0 ) ikkeTom.await();
+            HashMap<String, Subsekvens> fjernetHashmap = subreg.hentHashBeholder().get(0);
+            subreg.hentHashBeholder().remove(0);
+            return fjernetHashmap;
+        }
+        catch(InterruptedException e){
+            System.out.println("Avbrutt!");
+            return null;
+        }
+        finally{
+            laas.unlock();
+        }
+    }
+
+    public int stoerrelse() {
+        laas.lock();
+        try{
+            return subreg.hentHashBeholder().size();
+        }
+        finally{
+            laas.unlock();
+        }
+    }
+
+
+    public static HashMap<String, Subsekvens> lesFraFil(String file){
+        laas.lock();
+        try{
+            HashMap<String, Subsekvens> sekvenserTilEnPerson = new HashMap<>();
+            Scanner sc = null;
+            try{
+                sc = new Scanner(new File(file));
+            }
+            catch(FileNotFoundException e){
+                System.out.println("Har ikke funnet filen!");
+                System.exit(-1);
+            }
+            while(sc.hasNextLine()){
+                String data = sc.nextLine().trim();
+                if(data.length() <= 2) System.exit(-1);
+                for(int i= 0; i < data.length()-2; i++){
+                    String substring = data.substring(i,i+3);
+                    if(!sekvenserTilEnPerson.containsKey(substring)){
+                        sekvenserTilEnPerson.put(substring,new Subsekvens(substring, 1));
+                    }
+                }
+            }
+            sc.close();
+            return sekvenserTilEnPerson;
+
+        }
+        finally{
+            laas.unlock();
+        }
+    }
+
+
+    public static HashMap<String, Subsekvens> slaaSammen(HashMap<String, Subsekvens> hm1, HashMap<String, Subsekvens> hm2){
+        HashMap<String, Subsekvens> sammenslaattHashmap = new HashMap<>();
+
+        for(String sub : hm1.keySet()){
+            if(hm2.containsKey(sub)){
+
+                Subsekvens sub2 = hm2.get(sub);
+                int verdi = sub2.hentAntallForekomster();
+
+                Subsekvens sub1 = hm1.get(sub);
+                sub1.leggTillAntallForekomster(verdi);
+
+                sammenslaattHashmap.put(sub, sub1);
+            }
+            else{
+                sammenslaattHashmap.put(sub, hm1.get(sub));
+            }
+        }
+        for(String sub : hm2.keySet()){
+            if(!sammenslaattHashmap.containsKey(sub)){
+                sammenslaattHashmap.put(sub, hm2.get(sub));
+            }
+        }
+        
+        return sammenslaattHashmap;
+    }
+
+}
